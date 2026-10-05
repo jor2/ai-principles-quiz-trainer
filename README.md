@@ -23,7 +23,9 @@ Keyboard: `A`–`D` or `1`–`4` to answer, `←` `→` to move, `F` to flag.
 
 ## Running it
 
-It's a static page with no dependencies and no build step.
+**Online:** https://jor2.github.io/ai-principles-quiz-trainer/ (works on a phone too).
+
+**Locally:** it's a static page with no dependencies and no build step.
 
 **Option 1: open the file.** Double-click `index.html`, or:
 
