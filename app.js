@@ -6,6 +6,12 @@
   const LETTERS = 'ABCD';
   const app = document.getElementById('app');
 
+  // Extra questions (data-extra.js) join their week's list, marked extra.
+  for (const x of window.QUIZ_EXTRA || []) {
+    const w = DATA.find(d => d.week === x.week);
+    if (w) w.questions.push(...x.questions.map(q => ({ ...q, extra: true })));
+  }
+
   // ---------- Lookups ----------
   const Q = {};
   const POINT = {};
@@ -15,10 +21,23 @@
     for (const p of w.points) POINT[p.id] = p;
     for (const q of w.questions) Q[q.id] = { ...q, week: w.week };
   }
+  const ALL_QS = Object.values(Q);
+  const CORE_COUNT = ALL_QS.filter(q => !q.extra).length;
+  const EXTRA_COUNT = ALL_QS.length - CORE_COUNT;
+
+  // ---------- Question sets ----------
+  const POOLS = [
+    ['all', 'Original + new', ALL_QS.length],
+    ['core', 'Original only', CORE_COUNT],
+    ['extra', 'New only', EXTRA_COUNT],
+  ].filter(([k]) => EXTRA_COUNT || k === 'core');
+  const inPool = (q, pool) => pool === 'all' || (pool === 'extra') === !!q.extra;
+  const poolQs = (w, pool) => w.questions.filter(q => inPool(q, pool));
+  const poolTag = pool => (pool === 'extra' ? ' · new questions' : pool === 'core' ? ' · original questions' : '');
 
   // ---------- Storage ----------
   const KEY = 'aiquiz.v1';
-  let store = { attempts: [], qstats: {}, settings: { shuffle: true, instant: false, mockSize: 20 }, current: null };
+  let store = { attempts: [], qstats: {}, settings: { shuffle: true, instant: false, mockSize: 20, pool: 'all' }, current: null };
   try {
     const raw = localStorage.getItem(KEY);
     if (raw) {
@@ -26,6 +45,7 @@
       store = { ...store, ...s, settings: { ...store.settings, ...(s.settings || {}) } };
     }
   } catch (e) { /* storage unavailable: run without persistence */ }
+  if (!POOLS.some(([k]) => k === store.settings.pool)) store.settings.pool = POOLS[0][0];
   function save() {
     try { localStorage.setItem(KEY, JSON.stringify(store)); } catch (e) { /* ignore */ }
   }
@@ -54,6 +74,7 @@
   function mastery(week) {
     return WEEK[week].questions.filter(q => store.qstats[q.id] && store.qstats[q.id].last === true).length;
   }
+  const bestAttempt = at => at.reduce((b, a) => (!b || a.correct / a.total > b.correct / b.total ? a : b), null);
   function mistakeIds() {
     return Object.keys(store.qstats).filter(id => Q[id] && store.qstats[id].last === false);
   }
@@ -79,6 +100,7 @@
       </${el}>`;
     }).join('')}</div>`;
   }
+  const newPill = q => (q.extra ? '<span class="pill new">New</span>' : '');
   function explainHtml(q) {
     return `<div class="explain"><div class="why">${esc(q.why)}</div>${pointRefs(q)}</div>`;
   }
@@ -91,7 +113,7 @@
     app.innerHTML = `
       <section class="hero">
         <h1>Week 6 quiz preparation</h1>
-        <p class="muted">100 practice questions across five weeks. You've answered <strong>${totalMastered}/100</strong> correctly on your most recent try at each one.</p>
+        <p class="muted">${ALL_QS.length} practice questions across five weeks${EXTRA_COUNT ? ` (${CORE_COUNT} original + ${EXTRA_COUNT} new)` : ''}. You've answered <strong>${totalMastered}/${ALL_QS.length}</strong> correctly on your most recent try at each one.</p>
       </section>
       ${cur ? `<div class="card row" style="border-color:var(--accent)">
         <div><strong>Test in progress:</strong> ${esc(cur.title)} · ${cur.answers.filter(a => a !== null).length}/${cur.items.length} answered</div>
@@ -106,12 +128,16 @@
         </button>
         <button class="mode mock" data-go="start/mock">
           <span class="icon">📝</span><strong>Mock exam</strong>
-          <span class="muted small">Random questions drawn evenly from all five weeks. Choose 20, 40 or all 100.</span>
+          <span class="muted small">Random questions drawn evenly from all five weeks. Choose 20, 40 or all of them, from the original questions, the new ones or both.</span>
         </button>
         <button class="mode" data-go="tests">
           <span class="icon">🎯</span><strong>Category test</strong>
-          <span class="muted small">All 20 questions from one week in a random order. Your results are saved.</span>
+          <span class="muted small">Every question from one week in a random order. Your results are saved.</span>
         </button>
+        ${EXTRA_COUNT ? `<button class="mode" data-act="pool" data-pool="extra" data-to="start/mock">
+          <span class="icon">🆕</span><strong>New questions</strong>
+          <span class="muted small">Just the ${EXTRA_COUNT} new questions, ${EXTRA_COUNT / DATA.length} from each week, on topics the original set covers lightly.</span>
+        </button>` : ''}
         ${mistakes ? `<button class="mode mistakes" data-go="start/mistakes">
           <span class="icon">🔁</span><strong>Practise my mistakes</strong>
           <span class="muted small">${mistakes} question${mistakes === 1 ? '' : 's'} you got wrong last time.</span>
@@ -121,16 +147,17 @@
       <div class="progress-list">${DATA.map(w => {
         const at = weekAttempts(w.week);
         const last = at[at.length - 1];
-        const best = at.reduce((m, a) => Math.max(m, a.correct), 0);
+        const best = bestAttempt(at);
         const m = mastery(w.week);
+        const n = w.questions.length;
         return `<div class="prog-row">
           <span class="wk">${w.week}</span>
           <div>
             <div><strong>${esc(w.title)}</strong></div>
             <div class="muted small">${at.length
-              ? `Last test ${last.correct}/${last.total} · best ${best}/20 · ${at.length} attempt${at.length === 1 ? '' : 's'}`
-              : 'No category test yet'} · ${m}/20 right most recently</div>
-            <div class="bar ${m >= 15 ? 'good' : ''}"><span style="width:${pct(m, 20)}%"></span></div>
+              ? `Last test ${last.correct}/${last.total} · best ${best.correct}/${best.total} · ${at.length} attempt${at.length === 1 ? '' : 's'}`
+              : 'No category test yet'} · ${m}/${n} right most recently</div>
+            <div class="bar ${m / n >= PASS_MARK ? 'good' : ''}"><span style="width:${pct(m, n)}%"></span></div>
           </div>
           <div class="prog-actions">
             <button class="btn" data-go="study/${w.week}">Study</button>
@@ -145,13 +172,13 @@
     app.innerHTML = `
       <button class="back" data-go="home">← Home</button>
       <h1>${isStudy ? 'Study by category' : 'Category test'}</h1>
-      <p class="muted">${isStudy ? 'Choose a week to revise.' : 'Choose a week. You get all 20 of its questions in a random order, and the result is saved.'}</p>
+      <p class="muted">${isStudy ? 'Choose a week to revise.' : 'Choose a week. You get all of its questions in a random order, and the result is saved. You can pick original, new or both on the next screen.'}</p>
       <div class="cat-grid">${DATA.map(w => {
         const at = weekAttempts(w.week);
         const last = at[at.length - 1];
         return `<button class="cat" data-go="${isStudy ? `study/${w.week}` : `start/category/${w.week}`}">
           <span class="wk">${w.week}</span>
-          <span><strong>${esc(w.title)}</strong><br><span class="muted small">${w.points.length} points · 20 questions</span></span>
+          <span><strong>${esc(w.title)}</strong><br><span class="muted small">${w.points.length} points · ${w.questions.length} questions${w.questions.some(q => q.extra) ? ` (${w.questions.filter(q => q.extra).length} new)` : ''}</span></span>
           <span>${last ? `<span class="pill ${last.correct / last.total >= PASS_MARK ? 'good' : 'bad'}">Last ${last.correct}/${last.total}</span>` : ''}</span>
         </button>`;
       }).join('')}</div>`;
@@ -184,7 +211,7 @@
           const st = store.qstats[q.id];
           const pill = st ? `<span class="pill ${st.last ? 'good' : 'bad'}">${st.last ? '✓' : '✗'} last time · ${st.right}/${st.seen} overall</span>` : '';
           return `<article class="card" id="q${q.n}">
-            <div class="qhead"><span class="pill">Q${q.n}</span>${pill}</div>
+            <div class="qhead"><span class="pill">Q${q.n}</span>${newPill(q)}${pill}</div>
             <div class="qtext">${esc(q.question || q.q)}</div>
             ${hide
               ? `<div data-reveal="${q.id}">${optionsHtml(q, { clickable: true })}</div>`
@@ -210,14 +237,15 @@
   // ---------- Test setup ----------
   function buildTest(kind, arg) {
     let ids, title, week = null;
+    const pool = store.settings.pool;
     if (kind === 'category') {
       week = Number(arg);
-      ids = shuffle(WEEK[week].questions.map(q => q.id));
-      title = `Week ${week} test: ${WEEK[week].title}`;
+      ids = shuffle(poolQs(WEEK[week], pool).map(q => q.id));
+      title = `Week ${week} test: ${WEEK[week].title}${poolTag(pool)}`;
     } else if (kind === 'mock') {
-      const per = Math.round(store.settings.mockSize / DATA.length);
-      ids = shuffle(DATA.flatMap(w => shuffle(w.questions.map(q => q.id)).slice(0, per)));
-      title = `Mock exam (${ids.length} questions)`;
+      const { per } = mockPlan();
+      ids = shuffle(DATA.flatMap(w => shuffle(poolQs(w, pool).map(q => q.id)).slice(0, per)));
+      title = `Mock exam (${ids.length} questions${poolTag(pool)})`;
     } else if (kind === 'mistakes') {
       ids = shuffle(mistakeIds());
       title = `Mistakes practice (${ids.length})`;
@@ -236,6 +264,16 @@
     };
   }
 
+  // Mock size: 20 or 40 drawn evenly from each week, or 'all' of the chosen set.
+  function mockPlan() {
+    const s = store.settings;
+    const available = ALL_QS.filter(q => inPool(q, s.pool)).length;
+    const sizes = [20, 40].filter(n => n < available);
+    const size = sizes.includes(s.mockSize) ? s.mockSize : 'all';
+    const per = size === 'all' ? Infinity : size / DATA.length;
+    return { available, sizes, size, per, count: size === 'all' ? available : size };
+  }
+
   function viewStart(kind, arg) {
     const s = store.settings;
     let heading, desc, count;
@@ -243,12 +281,12 @@
       const w = WEEK[arg];
       if (!w) return go('tests');
       heading = `Week ${w.week} test`;
-      desc = `${esc(w.title)}: all 20 questions in a random order.`;
-      count = 20;
+      count = poolQs(w, s.pool).length;
+      desc = `${esc(w.title)}: all ${count} questions from the chosen set, in a random order.`;
     } else if (kind === 'mock') {
       heading = 'Mock exam';
       desc = 'Questions drawn evenly from all five weeks, then shuffled.';
-      count = s.mockSize;
+      count = mockPlan().count;
     } else {
       count = mistakeIds().length;
       if (!count) return go('home');
@@ -260,10 +298,16 @@
       <div class="card">
         <h1>${heading}</h1>
         <p class="muted">${desc}</p>
-        ${kind === 'mock' ? `<p><strong>Number of questions</strong></p>
-          <div class="seg" style="margin-bottom:1rem">${[20, 40, 100].map(n =>
-            `<button class="${s.mockSize === n ? 'active' : ''}" data-act="mockSize" data-n="${n}">${n}</button>`).join('')}</div>
-          <p class="muted small">${s.mockSize / 5} from each week.</p>` : `<p><strong>${count} questions</strong></p>`}
+        ${kind !== 'mistakes' && POOLS.length > 1 ? `<p><strong>Question set</strong></p>
+          <div class="seg" style="margin-bottom:1rem">${POOLS.map(([k, label, n]) =>
+            `<button class="${s.pool === k ? 'active' : ''}" data-act="pool" data-pool="${k}">${label} (${n})</button>`).join('')}</div>` : ''}
+        ${kind === 'mock' ? (() => {
+          const m = mockPlan();
+          return `<p><strong>Number of questions</strong></p>
+          <div class="seg" style="margin-bottom:1rem">${[...m.sizes, 'all'].map(n =>
+            `<button class="${m.size === n ? 'active' : ''}" data-act="mockSize" data-n="${n}">${n === 'all' ? `All ${m.available}` : n}</button>`).join('')}</div>
+          <p class="muted small">${m.size === 'all' ? `Every question in the set, ${m.available / DATA.length} from each week.` : `${m.per} from each week.`}</p>`;
+        })() : `<p><strong>${count} questions</strong></p>`}
         <label class="toggle"><input type="checkbox" data-act="shuffle" ${s.shuffle ? 'checked' : ''}>
           <span><strong>Shuffle answer options</strong><br><span class="muted small">So you learn the answer, not its letter.</span></span></label>
         <label class="toggle"><input type="checkbox" data-act="instant" ${s.instant ? 'checked' : ''}>
@@ -295,7 +339,7 @@
       <div class="card" style="margin-top:1rem">
         <div class="qhead">
           <span class="pill">Question ${t.idx + 1} of ${t.items.length}</span>
-          <span class="pill">Week ${q.week}</span>
+          <span class="pill">Week ${q.week}</span>${newPill(q)}
           ${t.flags[t.idx] ? '<span class="pill flag">⚑ Flagged</span>' : ''}
         </div>
         <div class="qtext">${esc(q.q)}</div>
@@ -391,7 +435,7 @@
         const q = Q[it.qid];
         const n = a.items.indexOf(it) + 1;
         return `<article class="card">
-          <div class="qhead"><span class="pill">Q${n}</span><span class="pill">Week ${q.week} · Q${q.n}</span>
+          <div class="qhead"><span class="pill">Q${n}</span><span class="pill">Week ${q.week} · Q${q.n}</span>${newPill(q)}
             <span class="pill ${it.right ? 'good' : 'bad'}">${it.right ? '✓ Correct' : it.chosen === null ? '— Not answered' : '✗ Wrong'}</span>
             ${it.flagged ? '<span class="pill flag">⚑ Flagged</span>' : ''}</div>
           <div class="qtext">${esc(q.q)}</div>
@@ -414,11 +458,11 @@
           <tr><th>Week</th><th>Attempts</th><th>Last</th><th>Best</th><th>Average</th></tr>
           ${DATA.map(w => {
             const at = weekAttempts(w.week);
-            const avg = at.length ? at.reduce((s, a) => s + a.correct, 0) / at.length : 0;
+            const avg = at.length ? Math.round(at.reduce((s, a) => s + (100 * a.correct) / a.total, 0) / at.length) : 0;
             return `<tr><td>${w.week}. ${esc(w.title)}</td><td class="num">${at.length}</td>
-              <td class="num">${at.length ? `${at[at.length - 1].correct}/20` : '–'}</td>
-              <td class="num">${at.length ? `${Math.max(...at.map(a => a.correct))}/20` : '–'}</td>
-              <td class="num">${at.length ? avg.toFixed(1) : '–'}</td></tr>`;
+              <td class="num">${at.length ? `${at[at.length - 1].correct}/${at[at.length - 1].total}` : '–'}</td>
+              <td class="num">${at.length ? `${bestAttempt(at).correct}/${bestAttempt(at).total}` : '–'}</td>
+              <td class="num">${at.length ? `${avg}%` : '–'}</td></tr>`;
           }).join('')}
         </table></div>
       </div>
@@ -486,7 +530,11 @@
     if (!act) return;
     const s = store.settings;
     switch (act.dataset.act) {
-      case 'mockSize': s.mockSize = Number(act.dataset.n); save(); route(); break;
+      case 'mockSize': s.mockSize = act.dataset.n === 'all' ? 'all' : Number(act.dataset.n); save(); route(); break;
+      case 'pool':
+        s.pool = act.dataset.pool; save();
+        if (act.dataset.to) go(act.dataset.to); else route();
+        break;
       case 'begin':
         store.current = buildTest(act.dataset.kind, act.dataset.arg);
         save(); go('test'); break;

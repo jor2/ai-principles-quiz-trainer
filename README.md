@@ -2,7 +2,7 @@
 
 A multiple-choice revision app for the Week 6 quiz in **AI Principles and Practice** (Weeks 1 to 5), modelled on the Irish driver theory test apps.
 
-It contains 100 practice questions and 60 revision points across five weeks:
+It contains 120 practice questions (the summary's 100, plus 20 new ones) and 60 revision points across five weeks:
 
 1. Data Analysis and the ML Workflow
 2. Supervised Learning
@@ -13,8 +13,11 @@ It contains 100 practice questions and 60 revision points across five weeks:
 ## Modes
 
 - **Study by category:** read each week's points and checklist, then go through every question with its answer, the explanation, and the point it comes from. Turn on "hide answers" to quiz yourself.
-- **Mock exam:** questions drawn evenly from all five weeks (20, 40 or 100), with a score for each week.
-- **Category test:** all 20 questions from one week in random order. Every attempt is saved.
+- **Mock exam:** questions drawn evenly from all five weeks (20, 40 or all of them), with a score for each week.
+- **New questions:** the 20 new questions (4 per week) on their own. They target points the original 100 cover lightly, and each cites the point it tests.
+- **Category test:** every question from one week in random order. Every attempt is saved.
+
+Mock exams and category tests let you choose the question set: original + new, original only, or new only. New questions are tagged **New** in tests, results and the study pages.
 - **Practise my mistakes:** every question you got wrong on your most recent try.
 
 Tests include a question grid, flagging, a timer, a 75% pass mark, a full review of your answers afterwards, and a "retry the wrong ones" button. Answer options are shuffled by default. You can choose exam conditions (answers at the end) or see each answer straight away.
@@ -55,3 +58,4 @@ Results are kept in your browser's `localStorage`. They stay in the browser you 
 | `styles.css` | Styles, including dark mode and mobile layout |
 | `app.js` | Study, test, results and history screens |
 | `data.js` | Questions, answers, explanations and revision points, generated from the course's *Weeks 1 to 5 Quiz Summary* |
+| `data-extra.js` | The 20 new questions, written from the same summary |

@@ -103,6 +103,7 @@ main { max-width: 900px; margin: 0 auto; padding: 1.25rem 1rem 4rem; }
 .pill.good { background: var(--good-soft); color: var(--good); }
 .pill.bad { background: var(--bad-soft); color: var(--bad); }
 .pill.flag { background: var(--flag-soft); color: var(--flag); }
+.pill.new { background: var(--brand-soft); color: var(--brand); }
 
 /* Home */
 .hero h1 { margin-bottom: .25rem; }
