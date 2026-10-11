@@ -300,7 +300,7 @@
         <p class="muted">${desc}</p>
         ${kind !== 'mistakes' && POOLS.length > 1 ? `<p><strong>Question set</strong></p>
           <div class="seg" style="margin-bottom:1rem">${POOLS.map(([k, label, n]) =>
-            `<button class="${s.pool === k ? 'active' : ''}" data-act="pool" data-pool="${k}">${label} (${n})</button>`).join('')}</div>` : ''}
+            `<button class="${s.pool === k ? 'active' : ''}" data-act="pool" data-pool="${k}">${label} (${kind === 'category' ? poolQs(WEEK[arg], k).length : n})</button>`).join('')}</div>` : ''}
         ${kind === 'mock' ? (() => {
           const m = mockPlan();
           return `<p><strong>Number of questions</strong></p>
